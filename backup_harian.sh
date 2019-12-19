@@ -1,0 +1,96 @@
+#!/bin/sh
+
+# List of databases to be backed up separated by space
+dblist="
+db_klola
+db_klola_absensi
+db_klola_aman
+db_klola_asco
+db_klola_astrindo
+db_klola_bakmigm
+db_klola_cinovasi
+db_klola_ddi
+db_klola_ddi_associate
+db_klola_demo
+db_klola_dvl
+db_klola_dvl_bod
+db_klola_etana
+db_klola_g4s
+db_klola_g4s_argenta
+db_klola_g4s_cs
+db_klola_g4s_ss
+db_klola_g4s_sss
+db_klola_galenium
+db_klola_inalum
+db_klola_konsultan
+db_klola_medi
+db_klola_mrt
+db_klola_mrt_konsultan
+db_klola_nexmedia
+db_klola_payrolldemo
+db_klola_pij
+db_klola_pir
+db_klola_pir_bod
+db_klola_tu
+db_klola_ubc
+db_klola_unifam
+db_klola_unifam_plant
+mysql
+"
+
+# Directory for backups
+backupdir=/backup_db/harian/`date +\%y\%m\%d`
+tanggal=`date +\%y\%m\%d`
+awalan="day_"
+#dir=`ls $backupdir`
+
+# Number of versions to keep
+numversions=7
+
+# Full path for MySQL hotcopy command
+# Please put credentials into /root/.my.cnf
+#hotcopycmd=/usr/bin/mysqlhotcopy
+#hotcopycmd="/usr/bin/mysqldump --lock-tables --databases"
+hotcopycmd="/usr/bin/mysqldump --lock-tables --force --opt --insert-ignore --single-transaction --events --routines --databases"
+
+
+# Create directory if needed
+mkdir -p "$backupdir"
+if [ ! -d "$backupdir" ]; then
+   echo "Invalid directory: $backupdir"
+   exit 1
+fi
+
+# Hotcopy begins here
+echo "Dumping MySQL Databases..."
+RC=0
+for database in $dblist; do
+   echo
+   echo "Dumping $database ..."
+   mv "$backupdir/$database.gz" "$backupdir/$database.0.gz" 2> /dev/null
+   $hotcopycmd $database | gzip > "$backupdir/$awalan$database.gz"
+
+   RC=$?
+   if [ $RC -gt 0 ]; then
+     continue;
+   fi
+
+   # Rollover the backup directories
+   rm -fr "$backupdir/$database.$numversions.gz" 2> /dev/null
+   i=$numversions
+   while [ $i -gt 0 ]; do
+     mv "$backupdir/$database.`expr $i - 1`.gz" "$backupdir/$database.$i.gz" 2> /dev/null
+     i=`expr $i - 1`
+   done
+done
+
+if [ $RC -gt 0 ]; then
+   echo "MySQL Dump failed!"
+   exit $RC
+else
+   # Hotcopy is complete. List the backup versions!
+   #ls -l "$backupdir"
+   #echo "MySQL Dump is complete!"
+   swaks --to tony.arianto@klola.id --from "admin@klola.id" --header "Subject: Backup Database Harian Telah Berhasil" --body "Backup Database Harian Telah Berhasil" --server smtp.mandrillapp.com --port 587 --auth LOGIN --auth-user "tony.arianto@klola.id" --auth-password "Y7fJNofYlCL7Z8Z--vIkKg" -tls
+fi
+exit 0
